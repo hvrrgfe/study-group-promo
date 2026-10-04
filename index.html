@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<title>高中学习交流群</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{width:100%;height:100%;background:#000;overflow:hidden;
+    font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;}
+  #stage{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    overflow:hidden;background:#000;}
+  canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+  #text{position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;text-align:center;
+    pointer-events:none;z-index:5;}
+  #text .line{font-weight:700;letter-spacing:.25em;line-height:1.35;
+    text-shadow:0 0 28px rgba(255,255,255,.28),0 0 90px rgba(120,160,255,.25);
+    white-space:pre-line;}
+  #text .sub{margin-top:2.4vh;font-size:1.7vh;color:#8a8a8a;letter-spacing:.5em;}
+  #veil{position:absolute;inset:0;background:#000;z-index:9;
+    display:flex;align-items:center;justify-content:center;flex-direction:column;transition:opacity .9s;}
+  #veil h1{color:#fff;font-size:5vh;letter-spacing:.28em;font-weight:700;opacity:.94;}
+  #veil p{margin-top:1.6vh;color:#7d7d7d;font-size:1.9vh;letter-spacing:.3em;}
+  #startBtn{margin-top:4.6vh;padding:1.4vh 5vh;border:1px solid rgba(255,255,255,.32);
+    border-radius:999px;background:transparent;color:#fff;font-size:1.9vh;letter-spacing:.4em;
+    cursor:pointer;animation:pulse 2.2s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,.14);}
+    50%{box-shadow:0 0 40px 5px rgba(140,180,255,.28);}}
+  #end{position:absolute;inset:0;z-index:8;display:none;
+    align-items:center;justify-content:center;flex-direction:column;background:rgba(0,0,0,.5);}
+  #end .cta{padding:1.5vh 5.6vh;border-radius:999px;
+    background:linear-gradient(135deg,#ffd45e,#ff9b28);color:#1a1200;
+    font-size:2vh;font-weight:700;letter-spacing:.4em;text-decoration:none;
+    box-shadow:0 0 44px rgba(255,180,60,.35);}
+  #end .ghost{margin-top:2.4vh;color:#9a9a9a;font-size:1.7vh;letter-spacing:.35em;
+    cursor:pointer;background:none;border:none;}
+  #rotate{position:absolute;inset:0;z-index:20;display:none;
+    align-items:center;justify-content:center;background:#000;color:#777;
+    font-size:3.4vw;letter-spacing:.3em;flex-direction:column;}
+  #rotate span{margin-top:2vh;font-size:2.6vw;color:#4d4d4d;}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="warp"></canvas>
+  <canvas id="dust"></canvas>
+  <div id="text"><div class="line" id="l1"></div><div class="sub" id="l2"></div></div>
+  <div id="end">
+    <a class="cta" href="https://hvrrgfe.github.io/study-group/" target="_blank">进入学习群</a>
+    <button class="ghost" id="replay">再看一遍</button>
+  </div>
+  <div id="veil">
+    <h1>高中学习交流群</h1>
+    <p>答题 · 积分 · 排名 · 逆袭</p>
+    <button id="startBtn">点击开始</button>
+  </div>
+</div>
+<div id="rotate">请横屏观看<span>或放大窗口</span></div>
+
+<script>
+/* ======= 场景文案（无配音，仅蹬蹬音效；不含活动时间信息） ======= */
+const SCENES = [
+  {t:"你还在一个人\n深夜刷题吗？", c:"#ffffff", d:1, s:0.6},
+  {t:"解不开的难题\n背不完的课文", c:"#ffffff", d:1, s:1.0},
+  {t:"没有人讨论\n也没有人陪你",   c:"#ffffff", d:1, s:1.0},
+  {t:"但是——\n这里有人",           c:"#ff3c3c", d:1, s:1.9},
+  {t:"七十个学霸\n已在此集结",     c:"#ffffff", d:1, s:1.1},
+  {t:"数学 · 语文 · 物理\n化学 · 生物", c:"#ffc83c", d:1, s:1.2},
+  {t:"随时提问\n随时讨论",         c:"#ffffff", d:1, s:1.0},
+  {t:"答题 · 积分\n排名 · 逆袭",   c:"#ffffff", d:1, s:1.1},
+  {t:"你以为\n这只是个群？",       c:"#ffffff", d:1, s:1.2},
+  {t:"不\n这是你的战场",           c:"#ff3c3c", d:1, s:2.2},
+  {t:"加入高中学习交流群\n一起封神", c:"#ffc83c", d:0, s:1.4}
+];
+const SCENE_MS = 4200, FADE_MS = 520;
+
+/* ======= 音效：蹬蹬（Web Audio 合成） ======= */
+let ac = null;
+function initAudio(){
+  if(!ac) ac = new (window.AudioContext||window.webkitAudioContext)();
+  if(ac.state === "suspended") ac.resume();
+}
+function dengDeng(){
+  if(!ac || ac.state !== "running") return;
+  const t0 = ac.currentTime + 0.02;
+  [0, 0.22].forEach(dt=>{
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = "sine";
+    o.frequency.setValueAtTime(76, t0+dt);
+    o.frequency.exponentialRampToValueAtTime(43, t0+dt+0.38);
+    g.gain.setValueAtTime(0.0001, t0+dt);
+    g.gain.exponentialRampToValueAtTime(0.9, t0+dt+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0+dt+0.44);
+    o.connect(g); g.connect(ac.destination);
+    o.start(t0+dt); o.stop(t0+dt+0.48);
+  });
+}
+
+/* ======= 画布与舞台（固定 16:9 设计，自适应信箱化） ======= */
+const DESIGN_W = 1920, DESIGN_H = 1080;
+const stage = document.getElementById("stage");
+const warp = document.getElementById("warp"), wctx = warp.getContext("2d");
+const dust = document.getElementById("dust"), dctx = dust.getContext("2d");
+let W=DESIGN_W, H=DESIGN_H, CX=W/2, CY=H/2, DPR=Math.min(window.devicePixelRatio||1, 2);
+let stars=[], particles=[], speed=1, targetSpeed=1, glow=null;
+
+function makeGlow(){
+  const g = document.createElement("canvas"); g.width=480; g.height=270;
+  const gc = g.getContext("2d");
+  const rg = gc.createRadialGradient(240,135,0,240,135,260);
+  rg.addColorStop(0,"rgba(150,185,255,0.30)");
+  rg.addColorStop(0.45,"rgba(90,120,220,0.10)");
+  rg.addColorStop(1,"rgba(0,0,0,0)");
+  gc.fillStyle=rg; gc.fillRect(0,0,480,270);
+  glow = g;
+}
+function resize(){
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const s = Math.min(vw/DESIGN_W, vh/DESIGN_H);
+  const sw = Math.round(DESIGN_W*s), sh = Math.round(DESIGN_H*s);
+  stage.style.width = sw+"px"; stage.style.height = sh+"px";
+  document.getElementById("rotate").style.display =
+    (vw/vh < 1.05) ? "flex" : "none";
+  W = DESIGN_W; H = DESIGN_H; CX = W/2; CY = H/2;
+  [warp,dust].forEach(cv=>{ cv.width = W*DPR; cv.height = H*DPR; });
+  wctx.setTransform(DPR,0,0,DPR,0,0);
+  dctx.setTransform(DPR,0,0,DPR,0,0);
+  buildStars();
+}
+function buildStars(){
+  const n = 620;
+  stars = [];
+  for(let i=0;i<n;i++){
+    stars.push({x:(Math.random()*2-1), y:(Math.random()*2-1),
+                z:Math.random()*0.96+0.04});
+  }
+  particles = [];
+  for(let i=0;i<110;i++){
+    particles.push({x:Math.random()*W, y:Math.random()*H,
+                    vx:(Math.random()-0.5)*0.16, vy:(Math.random()-0.5)*0.16,
+                    r:Math.random()*2.0+0.6, ph:Math.random()*6.28,
+                    sp:0.4+Math.random()*1.0});
+  }
+}
+window.addEventListener("resize", resize);
+
+let last = performance.now();
+function loop(now){
+  const dt = Math.min((now-last)/16.667, 3); last = now;
+  speed += (targetSpeed - speed)*0.03*dt;
+
+  /* ---- 星场拖尾：宇宙缩放 ---- */
+  wctx.fillStyle = "rgba(2,3,8,0.34)";
+  wctx.fillRect(0,0,W,H);
+
+  wctx.globalCompositeOperation = "lighter";
+  /* 中心辉光 */
+  wctx.globalAlpha = 0.55 + 0.25*Math.min(1,speed/2.2);
+  wctx.drawImage(glow, 0, 0, W, H);
+  wctx.globalAlpha = 1;
+
+  const dz = 0.0030*speed*dt;
+  for(const s of stars){
+    s.z -= dz;
+    if(s.z <= 0.03){ s.z = 1; s.x = Math.random()*2-1; s.y = Math.random()*2-1; }
+    const k  = 1/s.z,        x  = CX + s.x*k*CX,  y  = CY + s.y*k*CY;
+    const kp = 1/(s.z+dz*7), xp = CX + s.x*kp*CX, yp = CY + s.y*kp*CY;
+    if((x<0&&xp<0)||(x>W&&xp>W)||(y<0&&yp<0)||(y>H&&yp>H)) continue;
+    const near = s.z<0.42 ? Math.pow(1-s.z/0.42, 1.5) : 0;
+    wctx.strokeStyle = "rgba("+(190+Math.round(near*65))+","+
+                       (205+Math.round(near*50))+",255,"+(0.30+near*0.70).toFixed(3)+")";
+    wctx.lineWidth = 0.7 + near*3.0;
+    wctx.beginPath(); wctx.moveTo(xp,yp); wctx.lineTo(x,y); wctx.stroke();
+  }
+  wctx.globalCompositeOperation = "source-over";
+
+  /* ---- 漂浮粒子 ---- */
+  dctx.clearRect(0,0,W,H);
+  dctx.globalCompositeOperation = "lighter";
+  for(const p of particles){
+    p.x += p.vx*dt; p.y += p.vy*dt; p.ph += 0.024*p.sp*dt;
+    if(p.x < -12) p.x = W+12; if(p.x > W+12) p.x = -12;
+    if(p.y < -12) p.y = H+12; if(p.y > H+12) p.y = -12;
+    const a = 0.18 + 0.42*(0.5+0.5*Math.sin(p.ph));
+    dctx.fillStyle = "rgba(175,200,255,"+a.toFixed(3)+")";
+    dctx.beginPath(); dctx.arc(p.x,p.y,p.r,0,6.2832); dctx.fill();
+  }
+  dctx.globalCompositeOperation = "source-over";
+  requestAnimationFrame(loop);
+}
+
+/* ======= 场景播放器 ======= */
+const l1 = document.getElementById("l1"), l2 = document.getElementById("l2");
+const veil = document.getElementById("veil"), end = document.getElementById("end");
+let playing = false, timers = [];
+
+function setScene(i, first){
+  const s = SCENES[i];
+  l1.style.color = s.c;
+  l1.style.fontSize = "min(9.4vh, 8.2vw)";
+  l1.textContent = s.t;
+  l2.textContent = (i === SCENES.length-1) ? "study-group" : "";
+  l1.style.transition = "none"; l1.style.opacity = 0;
+  void l1.offsetWidth;
+  l1.style.transition = "opacity "+FADE_MS+"ms ease";
+  l1.style.opacity = 1;
+  targetSpeed = s.s;
+  if(s.d) setTimeout(dengDeng, first ? 380 : 90);
+}
+function play(){
+  playing = true; timers.forEach(clearTimeout); timers = [];
+  veil.style.opacity = 0; setTimeout(()=>veil.style.display="none", 900);
+  end.style.display = "none";
+  let t = 0;
+  SCENES.forEach((s,i)=>{
+    timers.push(setTimeout(()=>{
+      l1.style.transition = "opacity "+FADE_MS+"ms ease";
+      l1.style.opacity = 0;
+      setTimeout(()=>setScene(i, i===0), FADE_MS*0.7);
+    }, t));
+    t += SCENE_MS;
+  });
+  timers.push(setTimeout(()=>{
+    l1.style.transition = "opacity "+FADE_MS+"ms ease";
+    l1.style.opacity = 0;
+    targetSpeed = 3.0;
+    setTimeout(()=>{ end.style.display="flex"; playing=false; }, 760);
+  }, t));
+}
+
+document.getElementById("startBtn").addEventListener("click", ()=>{ initAudio(); play(); });
+document.getElementById("replay").addEventListener("click", ()=>{ initAudio(); play(); });
+document.addEventListener("keydown", e=>{ if(e.code==="Space" && !playing){ initAudio(); play(); }});
+
+makeGlow();
+resize();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
